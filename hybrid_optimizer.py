@@ -32,7 +32,8 @@ class PSO_GA(SkoBase):
         assert self.n_dim == len(self.lb) == len(self.ub), 'dim == len(lb) == len(ub) is not True'
         assert np.all(self.ub > self.lb), 'upper-bound must be greater than lower-bound'
 
-        self.has_constraint = bool(constraint_ueq)
+        self.has_constraint = bool(constraint_ueq) or bool(constraint_eq)
+        self.constraint_eq = constraint_eq
         self.constraint_ueq = constraint_ueq
         self.is_feasible = np.array([True] * size_pop)
 
@@ -228,12 +229,22 @@ class PSO_GA(SkoBase):
         greedy selection
         '''
         X = self.X.copy()
-        f_X = self.x2y().copy()
+        f_X = self.x2y().copy() # Uses x2y, which incorporates the constraint equations as a large penalty
         self.X = U = self.U
         f_U = self.x2y()
 
         self.X = np.where((f_X < f_U).reshape(-1, 1), X, U)
         return self.X
+    
+    def x2y(self):
+        self.cal_y()
+        if self.has_constraint:
+            penalty_eq = np.array([np.sum(np.abs([c_i(x) for c_i in self.constraint_eq])) for x in self.X])
+            penalty_ueq = np.array([np.sum(np.abs([max(0, c_i(x)) for c_i in self.constraint_ueq])) for x in self.X])
+            self.Y_penalized = self.Y + 1e5 * penalty_eq + 1e5 * penalty_ueq
+            return self.Y_penalized
+        else:
+            return None
     
     def run(self, max_iter=None, precision=None, N=20):
         '''
