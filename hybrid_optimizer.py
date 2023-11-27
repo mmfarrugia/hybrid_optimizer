@@ -10,8 +10,8 @@ from sko.operators import mutation
 
 
 class PSO_GA(SkoBase):
-    def __init__(self, func, n_dim, F=0.5, size_pop=50, max_iter=200, lb=-1000.0, ub=1000.0, w=0.8, c1=0.1, c2=0.1, prob_mut=0.001, constraint_eq=tuple(), constraint_ueq=tuple(), n_processes=0, early_stop=None, initial_guesses=None, guess_deviation=100, guess_ratio=0.25):
-        self.func = func_transformer(func) #, n_processes)
+    def __init__(self, func, n_dim, F=0.5, size_pop=50, max_iter=200, lb=[-1000.0], ub=[1000.0], w=0.8, c1=0.1, c2=0.1, prob_mut=0.001, constraint_eq=tuple(), constraint_ueq=tuple(), n_processes=0, early_stop=None, initial_guesses=None, guess_deviation=100, guess_ratio=0.25, transform_func=True):
+        self.func = func_transformer(func) if transform_func else func #, n_processes)
         self.func_raw = func
         self.n_dim = n_dim
         self.F = F
@@ -28,17 +28,18 @@ class PSO_GA(SkoBase):
 
         self.Chrom = None
 
-        self.lb, self.ub = np.array(lb) * np.ones(self.n_dim), np.array(ub) * np.ones(self.n_dim)
-        assert self.n_dim == len(self.lb) == len(self.ub), 'dim == len(lb) == len(ub) is not True'
+
+        self.lb, self.ub = np.array(lb), np.array(ub)
+        assert self.n_dim == self.lb.size == self.ub.size, 'dim == len(lb) == len(ub) is not True'
         assert np.all(self.ub > self.lb), 'upper-bound must be greater than lower-bound'
 
         self.has_constraint = bool(constraint_ueq) or bool(constraint_eq)
         self.constraint_eq = constraint_eq
         self.constraint_ueq = constraint_ueq
-        self.is_feasible = np.array([True] * size_pop)
+        self.is_feasible = np.array([True] * size_pop )
 
         self.crt_initial(initial_points=initial_guesses, initial_deviation=guess_deviation, tether_ratio=guess_ratio)
-        v_high = ub - lb
+        v_high = self.ub - self.lb
         self.V = np.random.uniform(low=-v_high, high=v_high, size=(self.size_pop, self.n_dim))
         self.Y = self.cal_y()
         self.pbest_x = self.X.copy()
@@ -89,10 +90,17 @@ class PSO_GA(SkoBase):
         self.V = self.w * self.V + \
                  self.cp * r1 * (self.pbest_x - self.X) + \
                  self.cg * r2 * (self.gbest_x - self.X)
+        if (self.V == 0).all():
+            print("uh oh")
         
     def update_X(self):
         self.X = self.X + self.V
-        self.X = np.clip(self.X, self.lb, self.ub) #TODO change boundary handler
+        for particle, coord in enumerate(self.X):
+            if (coord < self.lb).any() or (coord > self.ub).any():
+                self.X[particle] = reflective(self, coord, (self.lb, self.ub))
+
+
+        self.X = np.clip(self.X, self.lb, self.ub) #TODO CHANGE BOUNDARY HANDLER, THIS IS WHAT IS KILLING FUNCTION
 
     # def tsp_update_X(self):
     #     for i in range(self.size_pop):
@@ -189,7 +197,10 @@ class PSO_GA(SkoBase):
     def pso_iter(self):
         self.update_pso_V()
         self.recorder()
+        old_x = self.X.copy()
         self.update_X()
+        if (old_x == self.X).all():
+            print("this is unholy")
         self.cal_y()
         self.update_pbest()
         self.update_gbest()
@@ -198,6 +209,7 @@ class PSO_GA(SkoBase):
         '''
         V[i]=X[r1]+F(X[r2]-X[r3]),
         where i, r1, r2, r3 are randomly generated
+        from differential evolution
         '''
         X = self.X
         # i is not needed,
@@ -205,6 +217,10 @@ class PSO_GA(SkoBase):
         random_idx = np.random.randint(0, self.size_pop, size=(self.size_pop, 3))
 
         r1, r2, r3 = random_idx[:, 0], random_idx[:, 1], random_idx[:, 2]
+        while (r1 == r2).all() or (r2 == r3).all() or (r1 == r3).all():
+            random_idx = np.random.randint(0, self.size_pop, size=(self.size_pop, 3))
+            r1, r2, r3 = random_idx[:, 0], random_idx[:, 1], random_idx[:, 2]
+
         #assert r1 != r2 and r2 != r3
 
         # 这里F用固定值，为了防止早熟，可以换成自适应值
@@ -220,7 +236,7 @@ class PSO_GA(SkoBase):
         '''
         if rand < prob_crossover, use V, else use X
         '''
-        mask = np.random.rand(self.size_pop, self.n_dim) < self.prob_mut
+        mask = np.random.rand(self.size_pop, self.n_dim) <= self.prob_mut
         self.U = np.where(mask, self.V, self.X)
         return self.U
 
@@ -239,12 +255,14 @@ class PSO_GA(SkoBase):
     def x2y(self):
         self.cal_y()
         if self.has_constraint:
-            penalty_eq = np.array([np.sum(np.abs([c_i(x) for c_i in self.constraint_eq])) for x in self.X])
-            penalty_ueq = np.array([np.sum(np.abs([max(0, c_i(x)) for c_i in self.constraint_ueq])) for x in self.X])
-            self.Y_penalized = self.Y + 1e5 * penalty_eq + 1e5 * penalty_ueq
+            penalty_eq = 1e5 * np.array([np.array([np.sum(np.abs([c_i(x) for c_i in self.constraint_eq]))]) for x in self.X])
+            penalty_eq = np.reshape(penalty_eq, (-1, 1))
+            penalty_ueq = 1e5 * np.array([np.sum(np.abs([max(0, c_i(x)) for c_i in self.constraint_ueq])) for x in self.X])
+            penalty_ueq = np.reshape(penalty_ueq, (-1, 1))
+            self.Y_penalized = self.Y + penalty_eq + penalty_ueq
             return self.Y_penalized
         else:
-            return None
+            return self.Y
     
     def run(self, max_iter=None, precision=None, N=20):
         '''
@@ -266,11 +284,12 @@ class PSO_GA(SkoBase):
                         break
                 else:
                     c = 0
+
+            self.de_iter()
+
             if self.verbose:
                 ('Iter: {}, Best fit: {} at {}'.format(iter_num, self.gbest_y, self.gbest_x))
             self.gbest_y_hist.append(self.gbest_y)
-
-            self.de_iter()
 
         self.best_x, self.best_y = self.gbest_x, self.gbest_y
         return self.best_x, self.best_y
@@ -619,3 +638,58 @@ class HO(SkoBase, metaclass=ABCMeta):
 
     fit = run
 
+def reflective(self, position, bounds, **kwargs):
+        r"""Reflect the particle at the boundary
+
+        This method reflects the particles that exceed the bounds at the
+        respective boundary. This means that the amount that the component
+        which is orthogonal to the exceeds the boundary is mirrored at the
+        boundary. The reflection is repeated until the position of the particle
+        is within the boundaries. The following algorithm describes the
+        behaviour of this strategy:
+
+        .. math::
+            :nowrap:
+
+            \begin{gather*}
+                \text{while } x_{i, t, d} \not\in \left[lb_d,\,ub_d\right] \\
+                \text{ do the following:}\\
+                \\
+                x_{i, t, d} =   \begin{cases}
+                                    2\cdot lb_d - x_{i, t, d} & \quad \text{if } x_{i,
+                                    t, d} < lb_d \\
+                                    2\cdot ub_d - x_{i, t, d} & \quad \text{if } x_{i,
+                                    t, d} > ub_d \\
+                                    x_{i, t, d} & \quad \text{otherwise}
+                                \end{cases}
+            \end{gather*}
+        """
+        lb, ub = bounds
+        lower_than_bound, greater_than_bound = out_of_bounds(
+            position, bounds
+        )
+        new_pos = position
+        while lower_than_bound[0].size != 0 or greater_than_bound[0].size != 0:
+            if lower_than_bound[0].size > 0:
+                new_pos[lower_than_bound] = (
+                    2 * lb[lower_than_bound[0]] - new_pos[lower_than_bound]
+                )
+            if greater_than_bound[0].size > 0:
+                new_pos[greater_than_bound] = (
+                    2 * ub[greater_than_bound] - new_pos[greater_than_bound]
+                )
+            lower_than_bound, greater_than_bound = out_of_bounds(
+                new_pos, bounds
+            )
+
+        return new_pos
+
+def out_of_bounds(position, bounds):
+        """Helper method to find indices of out-of-bound positions
+
+        This method finds the indices of the particles that are out-of-bound.
+        """
+        lb, ub = bounds
+        greater_than_bound = np.nonzero(position > ub)
+        lower_than_bound = np.nonzero(position < lb)
+        return (lower_than_bound, greater_than_bound)
