@@ -7,11 +7,14 @@ This module implements helpful classes to format your plots or create meshes.
 """
 
 # Import modules
+import copy
 import numpy as np
 from attr import attrib, attrs
 from attr.validators import instance_of
 from matplotlib import cm, colors
 import multiprocessing as mp
+
+import pandas as pd
 
 
 @attrs
@@ -415,6 +418,8 @@ def plot_contour(
         else:
             fig, ax = canvas
 
+        frame_text = ax.text(0.05, 0.95, s='', transform=ax.transAxes, horizontalalignment='left',verticalalignment='top')
+
         # Get number of iterations
         n_iters = len(pos_history)
 
@@ -448,6 +453,7 @@ def plot_contour(
             repeat_delay=animator.repeat_delay,
         )
     except TypeError:
+        print("Please check your input type")
         #rep.logger.exception("Please check your input type")
         raise
     else:
@@ -555,7 +561,9 @@ def plot_surface(
             fig, ax = canvas
 
         # Initialize 3D-axis
-        ax = Axes3D(fig)
+        ax = plt.axes(projection='3d') #Axes3D(fig)
+
+        frame_text = ax.text(0.05*designer.limits[0][0], 0.95*designer.limits[1][1], z= 0.95*designer.limits[2][1], s='', transform= ax.transAxes, horizontalalignment='left',verticalalignment='top')
 
         n_iters = len(pos_history)
 
@@ -593,10 +601,142 @@ def plot_surface(
             repeat_delay=animator.repeat_delay,
         )
     except TypeError:
+        print("Please check your input type")
         #rep.logger.exception("Please check your input type")
         raise
     else:
         return anim
+    
+
+def plot_summary(
+    optimizers,
+    canvas=None,
+    title="Trajectory",
+    titles=None,
+    mark=None,
+    designer=None,
+    mesher=None,
+    animator=None,
+    n_processes=None,
+    **kwargs
+):
+    """Draw a 2D contour map for particle trajectories
+
+    Here, the space is represented as a flat plane. The contours indicate the
+    elevation with respect to the objective function. This works best with
+    2-dimensional swarms with their fitness in z-space.
+
+    Parameters
+    ----------
+    optimizers : numpy.ndarray or list
+        List of optimizations to summarize
+        :code:`(iteration, n_particles, dimensions)`
+    canvas : (:obj:`matplotlib.figure.Figure`, :obj:`matplotlib.axes.Axes`),
+        The (figure, axis) where all the events will be draw. If :code:`None`
+        is supplied, then plot will be drawn to a fresh set of canvas.
+    title : str, optional
+        The title of the plotted graph. Default is `Trajectory`
+    mark : tuple, optional
+        Marks a particular point with a red crossmark. Useful for marking
+        the optima.
+    designer : :obj:`pyswarms.utils.formatters.Designer`, optional
+        Designer class for custom attributes
+    mesher : :obj:`pyswarms.utils.formatters.Mesher`, optional
+        Mesher class for mesh plots
+    animator : :obj:`pyswarms.utils.formatters.Animator`, optional
+        Animator class for custom animation
+    n_processes : int
+        number of processes to use for parallel mesh point calculation (default: None = no parallelization)
+    **kwargs : dict
+        Keyword arguments that are passed as a keyword argument to
+        :obj:`matplotlib.axes.Axes` plotting function
+
+    Returns
+    -------
+    :obj:`matplotlib.animation.FuncAnimation`
+        The drawn animation that can be saved to mp4 or other
+        third-party tools
+    """
+
+    try:
+        # If no Designer class supplied, use defaults
+        if designer is None:
+            designer = Designer(
+                limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"]
+            )
+
+        # If no Animator class supplied, use defaults
+        if animator is None:
+            animator = Animator()
+
+        # If ax is default, then create new plot. Set-up the figure, the
+        # axis, and the plot element that we want to animate
+        if canvas is None:
+            fig, ax = plt.subplots(3, len(optimizers), figsize=designer.figsize)
+        else:
+            fig, ax = canvas
+
+        frame_text = ax[0,0].text(0.05, 0.95, s='', transform=ax[0,0].transAxes, horizontalalignment='left',verticalalignment='top')
+
+        # Get number of iterations
+        n_iters = len(optimizers[0].record_value['X'])
+
+        # Customize plot
+        fig.suptitle(title, fontsize=designer.title_fontsize)
+
+        
+
+        pos_histories = []
+        #np.expand_dims(pos_histories, 3)
+        plots = []
+
+        for i, opt in enumerate(optimizers):
+            assert len(opt.record_value['X']) == len(optimizers[0].record_value['X'])
+            if titles : ax[0,i].set_title(titles[i])
+
+            Y_history = pd.DataFrame(np.array(opt.record_value['Y']).reshape((-1, opt.size_pop)))
+            ax[1,i].set_title(str(opt.gbest_y)+' @ X: '+str(opt.gbest_x), fontsize=8)
+            ax[0,i].plot(Y_history.index, Y_history.values, '.')
+            Y_history.min(axis=1).cummin().plot(kind='line', ax=ax[1,i])
+
+            ax[2,i].set_xlabel(designer.label[0], fontsize=designer.text_fontsize)
+            ax[2,i].set_ylabel(designer.label[1], fontsize=designer.text_fontsize)
+            ax[2,i].set_xlim(designer.limits[0])
+            ax[2,i].set_ylim(designer.limits[1])
+
+            # Make a contour map if possible
+            if mesher is not None:
+                (xx, yy, zz) = _mesh(mesher, n_processes=n_processes)
+                ax[2,i].contour(xx, yy, zz, levels=mesher.levels)
+
+            # Mark global best if possible
+            if mark is not None:
+                ax[2,i].scatter(mark[0], mark[1], color="red", marker="x")
+
+            # Put scatter skeleton
+            plots.append(ax[2,i].scatter(x=[], y=[], c="black", alpha=0.6, **kwargs))
+            #np.expand_dims(pos_histories, 3, np.asarray(opt.record_value['X']))
+            pos_histories.append(np.asarray(opt.record_value['X']))
+
+
+        # Do animation
+        anim = animation.FuncAnimation(
+            fig=fig,
+            func=_animate_summary,
+            frames=range(n_iters),
+            fargs=(pos_histories, plots),
+            interval=animator.interval,
+            repeat=animator.repeat,
+            repeat_delay=animator.repeat_delay,
+        )
+    except TypeError:
+        print("Please check your input type")
+        #rep.logger.exception("Please check your input type")
+        raise
+    else:
+        return anim
+
+    
 
 
 def _animate(i, data, plot):
@@ -604,11 +744,35 @@ def _animate(i, data, plot):
     :class:`matplotlib.animation.FuncAnimation`
     """
     current_pos = data[i]
+    if i % 10 == 0:
+        plot.axes.texts[0].set_text(str(i))
+
     if np.array(current_pos).shape[1] == 2:
         plot.set_offsets(current_pos)
     else:
         plot._offsets3d = current_pos.T
     return (plot,)
+
+def _animate_summary(i, data, plots):
+    """Helper animation function that is called sequentially
+    IT ACTUALLY WORKS
+    :class:`matplotlib.animation.FuncAnimation`
+    """
+    print('i'+str(i))
+    print('data'+str(data))
+    print('plots '+str(plots))
+
+    for j, plot in enumerate(plots):
+        opt_data = data[j]
+        current_pos = opt_data[i]
+        #if i % 10 == 0:
+        #    plot.axes.texts[0].set_text(str(i))
+
+        if np.array(current_pos).shape[1] == 2:
+            plot.set_offsets(current_pos)
+        else:
+            plot._offsets3d = current_pos.T
+    return (plots,)
 
 
 def _mesh(mesher, n_processes=None):
