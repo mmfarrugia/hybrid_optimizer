@@ -758,9 +758,6 @@ def _animate_summary(i, data, plots):
     IT ACTUALLY WORKS
     :class:`matplotlib.animation.FuncAnimation`
     """
-    print('i'+str(i))
-    print('data'+str(data))
-    print('plots '+str(plots))
 
     for j, plot in enumerate(plots):
         opt_data = data[j]
