@@ -676,7 +676,7 @@ def plot_summary(
         else:
             fig, ax = canvas
 
-        frame_text = ax[0,0].text(0.05, 0.95, s='', transform=ax[0,0].transAxes, horizontalalignment='left',verticalalignment='top')
+        frame_text = ax[2,0].text(0.05, 0.95, s='', transform=ax[0,0].transAxes, horizontalalignment='left',verticalalignment='top')
 
         # Get number of iterations
         n_iters = len(optimizers[0].record_value['X'])
@@ -758,12 +758,12 @@ def _animate_summary(i, data, plots):
     IT ACTUALLY WORKS
     :class:`matplotlib.animation.FuncAnimation`
     """
+    if i % 10 == 0:
+            plots[0].axes.texts[0].set_text(str(i))
 
     for j, plot in enumerate(plots):
         opt_data = data[j]
         current_pos = opt_data[i]
-        #if i % 10 == 0:
-        #    plot.axes.texts[0].set_text(str(i))
 
         if np.array(current_pos).shape[1] == 2:
             plot.set_offsets(current_pos)
