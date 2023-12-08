@@ -104,6 +104,15 @@ def rosenbrock(p):
                np.square(np.square(p[i]) - p[i + 1]) + np.square(p[i] - 1)
     return res
 
+def styblinski_tang(x):
+    '''
+    -5 to 5 with global minimum of -39.16599*n_dim at (-2.903534,...,-2.903534)'''
+    n_dim = len(x)
+    sum = 0
+    for i in range(n_dim - 1):
+        sum += x[i] ** 4 - ( 16 * x[i] ** 2) + 5 * x[i]
+
+    return 0.5 * sum
 
 def sixhumpcamel(p):
     """
