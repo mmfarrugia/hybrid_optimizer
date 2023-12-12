@@ -556,12 +556,13 @@ def plot_surface(
         # If ax is default, then create new plot. Set-up the figure, the
         # axis, and the plot element that we want to animate
         if canvas is None:
-            fig, ax = plt.subplots(1, 1, figsize=designer.figsize)
+            fig = plt.figure(figsize=designer.figsize)
         else:
             fig, ax = canvas
 
         # Initialize 3D-axis
         ax = plt.axes(projection='3d') #Axes3D(fig)
+        ax.grid()
 
         frame_text = ax.text(0.05*designer.limits[0][0], 0.95*designer.limits[1][1], z= 0.95*designer.limits[2][1], s='', transform= ax.transAxes, horizontalalignment='left',verticalalignment='top')
 
@@ -687,11 +688,10 @@ def plot_summary(
         
 
         pos_histories = []
-        #np.expand_dims(pos_histories, 3)
         plots = []
 
         for i, opt in enumerate(optimizers):
-            assert len(opt.record_value['X']) == len(optimizers[0].record_value['X'])
+            #assert len(opt.record_value['X']) == len(optimizers[0].record_value['X'])
             if titles : ax[0,i].set_title(titles[i])
 
             Y_history = pd.DataFrame(np.array(opt.record_value['Y']).reshape((-1, opt.size_pop)))
@@ -763,7 +763,7 @@ def _animate_summary(i, data, plots):
 
     for j, plot in enumerate(plots):
         opt_data = data[j]
-        current_pos = opt_data[i]
+        current_pos = opt_data[i] if i < len(opt_data) else opt_data[-1]
 
         if np.array(current_pos).shape[1] == 2:
             plot.set_offsets(current_pos)
