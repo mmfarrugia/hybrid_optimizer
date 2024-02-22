@@ -476,15 +476,13 @@ class PSO_GA(SkoBase):
             random_idx = np.random.randint(0, self.size_pop, size=(self.size_pop, 3))
             r1, r2, r3 = random_idx[:, 0], random_idx[:, 1], random_idx[:, 2]
 
-        match self.mutation_strategy:
-
-            case "DE/best/1":
-                # DE/best/k strategy makes more sense here  (k=1 or 2)
-                self.V = self.gbest_x + self.F * (X[r2, :] - X[r3, :])
-            case "DE/rand/1":
-                self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
-            case "DE/rand/2":
-                self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
+        if self.mutation_strategy == "DE/best/1":
+            # DE/best/k strategy makes more sense here  (k=1 or 2)
+            self.V = self.gbest_x + self.F * (X[r2, :] - X[r3, :])
+        elif self.mutation_strategy == "DE/rand/1":
+            self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
+        elif self.mutation_strategy == "DE/rand/2":
+            self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
 
         # Here F uses a fixed value. In order to prevent premature maturity, it can be changed to an adaptive value.
 
