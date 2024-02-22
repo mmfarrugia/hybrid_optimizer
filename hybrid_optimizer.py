@@ -1,16 +1,13 @@
-from abc import ABCMeta, abstractmethod
 import numpy as np
 from enum import Enum
 
-from sko.PSO import PSO
-from sko.DE import DE
-from sko.base import SkoBase
 
+from sko.base import SkoBase
 from sko.tools import func_transformer
-from sko.operators import crossover, mutation, ranking, selection
-from sko.operators import mutation
+
 
 # region Utilities
+
 
 def reflective(self, position, bounds, **kwargs):
     r"""Reflect the particle at the boundary
@@ -54,6 +51,7 @@ def reflective(self, position, bounds, **kwargs):
 
     return new_pos
 
+
 def periodic(self, position, bounds, **kwargs):
     r"""Sets the particles a periodic fashion
 
@@ -79,29 +77,26 @@ def periodic(self, position, bounds, **kwargs):
 
     """
     lb, ub = bounds
-    lower_than_bound, greater_than_bound = out_of_bounds(
-        position, bounds
-    )
+    lower_than_bound, greater_than_bound = out_of_bounds(position, bounds)
     lower_than_bound = lower_than_bound[0]
     greater_than_bound = greater_than_bound[0]
-    bound_d = np.tile(
-        np.abs(np.array(ub) - np.array(lb)), (position.shape[0], 1)
-    )
+    bound_d = np.tile(np.abs(np.array(ub) - np.array(lb)), (position.shape[0], 1))
     bound_d = bound_d[0]
     ub = np.tile(ub, (position.shape[0], 1))[0]
     lb = np.tile(lb, (position.shape[0], 1))[0]
     new_pos = position
-    if lower_than_bound.size != 0:# and lower_than_bound[1].size != 0:
+    if lower_than_bound.size != 0:  # and lower_than_bound[1].size != 0:
         new_pos[lower_than_bound] = ub[lower_than_bound] - np.mod(
             (lb[lower_than_bound] - new_pos[lower_than_bound]),
             bound_d[lower_than_bound],
         )
-    if greater_than_bound.size != 0:# and greater_than_bound[1].size != 0:
+    if greater_than_bound.size != 0:  # and greater_than_bound[1].size != 0:
         new_pos[greater_than_bound] = lb[greater_than_bound] + np.mod(
             (new_pos[greater_than_bound] - ub[greater_than_bound]),
             bound_d[greater_than_bound],
         )
     return new_pos
+
 
 def random(self, position, bounds, **kwargs):
     """Set position to random location
@@ -110,9 +105,7 @@ def random(self, position, bounds, **kwargs):
     inside the boundary conditions.
     """
     lb, ub = bounds
-    lower_than_bound, greater_than_bound = out_of_bounds(
-        position, bounds
-    )
+    lower_than_bound, greater_than_bound = out_of_bounds(position, bounds)
     # Set indices that are greater than bounds
     new_pos = position
     new_pos[greater_than_bound[0]] = np.array(
@@ -142,19 +135,22 @@ def out_of_bounds(position, bounds):
     lower_than_bound = np.nonzero(position < lb)
     return (lower_than_bound, greater_than_bound)
 
+
 class Bounds_Handler(Enum):
     PERIODIC = periodic
     REFLECTIVE = reflective
     RANDOM = random
 
+
 # endregion Utilities
+
 
 class PSO_GA(SkoBase):
     def __init__(
         self,
         func,
         n_dim,
-        config = None,
+        config=None,
         F=0.5,
         size_pop=50,
         max_iter=200,
@@ -175,60 +171,46 @@ class PSO_GA(SkoBase):
         guess_deviation=100,
         guess_ratio=0.25,
         vectorize_func=True,
-        bounds_strategy:Bounds_Handler=Bounds_Handler.PERIODIC,
-        mutation_strategy = 'DE/rand/1'
+        bounds_strategy: Bounds_Handler = Bounds_Handler.PERIODIC,
+        mutation_strategy="DE/rand/1",
     ):
-        self.func = func_transformer(func) if config.get('vectorize_func', vectorize_func) else func  # , n_processes)
+        self.func = (
+            func_transformer(func)
+            if config.get("vectorize_func", vectorize_func)
+            else func
+        )  # , n_processes)
         self.func_raw = func
         self.n_dim = n_dim
 
         # if config_dict:
-        self.F = config.get('F', F)
-        assert config.get('size_pop', size_pop) % 2 == 0, "size_pop must be an even integer for GA"
-        self.size_pop = config.get('size_pop', size_pop)
-        self.tether_ratio = config.get('guess_ratio', guess_ratio)
-        self.max_iter = config.get('max_iter', max_iter)
-        self.prob_mut = config.get('prob_mut', prob_mut)
-        self.early_stop = config.get('early_stop', early_stop)
-        self.taper_GA = config.get('taper_GA', taper_GA)
-        self.taper_mutation = config.get('taper_mutation', taper_mutation)
-        self.skew_social = config.get('skew_social',  skew_social)
-        self.bounds_handler:Bounds_Handler = config.get('bounds_strategy', bounds_strategy)
-        self.mutation_strategy = config.get('mutation_strategy', mutation_strategy)
+        self.F = config.get("F", F)
+        assert (
+            config.get("size_pop", size_pop) % 2 == 0
+        ), "size_pop must be an even integer for GA"
+        self.size_pop = config.get("size_pop", size_pop)
+        self.tether_ratio = config.get("guess_ratio", guess_ratio)
+        self.max_iter = config.get("max_iter", max_iter)
+        self.prob_mut = config.get("prob_mut", prob_mut)
+        self.early_stop = config.get("early_stop", early_stop)
+        self.taper_GA = config.get("taper_GA", taper_GA)
+        self.taper_mutation = config.get("taper_mutation", taper_mutation)
+        self.skew_social = config.get("skew_social", skew_social)
+        self.bounds_handler: Bounds_Handler = config.get(
+            "bounds_strategy", bounds_strategy
+        )
+        self.mutation_strategy = config.get("mutation_strategy", mutation_strategy)
 
-        self.w = config.get('w', w)
-        self.cp = config.get('c1', c1)  # personal best -- cognitive
-        self.cg = config.get('c2', c2)  # global best -- social
+        self.w = config.get("w", w)
+        self.cp = config.get("c1", c1)  # personal best -- cognitive
+        self.cg = config.get("c2", c2)  # global best -- social
 
         self.Chrom = None
 
-        self.lb = np.array(config.get('lb',  lb))
-        self.ub = np.array(config.get('ub',  ub))
-        initial_guesses = config.get('initial_guesses', initial_guesses)
-        guess_deviation = config.get('guess_deviation', guess_deviation)
-        guess_ratio = config.get('guess_ratio', guess_ratio)
-
-        # else:
-        #     self.F = F
-        #     assert size_pop % 2 == 0, "size_pop must be an even integer for GA"
-        #     self.size_pop = size_pop
-        #     self.tether_ratio = guess_ratio
-        #     self.max_iter = max_iter
-        #     self.prob_mut = prob_mut
-        #     self.early_stop = early_stop
-        #     self.taper_GA = taper_GA
-        #     self.taper_mutation = taper_mutation
-        #     self.skew_social = skew_social
-        #     self.bounds_handler:Bounds_Handler = bounds_strategy
-        #     self.mutation_strategy = mutation_strategy
-
-        #     self.w = w
-        #     self.cp = c1  # personal best -- cognitive
-        #     self.cg = c2  # global best -- social
-
-        #     self.Chrom = None
-
-        #     self.lb, self.ub = np.array(lb), np.array(ub)
+        self.lb = np.array(config.get("lb", lb))
+        self.ub = np.array(config.get("ub", ub))
+        initial_guesses = config.get("initial_guesses", initial_guesses)
+        guess_deviation = config.get("guess_deviation", guess_deviation)
+        guess_ratio = config.get("guess_ratio", guess_ratio)
 
         assert (
             self.n_dim == self.lb.size == self.ub.size
@@ -293,17 +275,6 @@ class PSO_GA(SkoBase):
                 low=self.lb, high=self.ub, size=(self.size_pop, self.n_dim)
             )
 
-    # def pso_add(self, c, x1, x2):
-    #     x1, x2 = x1.tolist(), x2.tolist()
-    #     ind1, ind2 = np.random.randint(0, self.n_dim - 1, 2)
-    #     if ind1 >= ind2:
-    #         ind1, ind2 = ind2, ind1 + 1
-
-    #     part1 = x2[ind1:ind2]
-    #     part2 = [i for i in x1 if i not in part1]  # this is very slow
-
-    #     return np.array(part1 + part2)
-
     def update_pso_V(self):
         r1 = np.random.rand(self.size_pop, self.n_dim)
         r2 = np.random.rand(self.size_pop, self.n_dim)
@@ -321,45 +292,12 @@ class PSO_GA(SkoBase):
             if (coord < self.lb).any() or (coord > self.ub).any():
                 self.X[particle] = self.bounds_handler(self, coord, (self.lb, self.ub))
 
-
-
-    # def tsp_update_X(self):
-    #     for i in range(self.size_pop):
-    #         x = self.X[i, :]
-    #         x = self.pso_add(self.cp, x, self.pbest_x[i])
-    #         self.X[i, :] = x
-
-    #     self.cal_y()
-    #     self.update_pbest()
-    #     self.update_gbest()
-
-    #     for i in range(self.size_pop):
-    #         x = self.X[i, :]
-    #         x = self.pso_add(self.cg, x, self.gbest_x)
-    #         self.X[i, :] = x
-
-    #     self.cal_y()
-    #     self.update_pbest()
-    #     self.update_gbest()
-
-    #     for i in range(self.size_pop):
-    #         x = self.X[i, :]
-    #         new_x_strategy = np.random.randint(3)
-    #         if new_x_strategy == 0:
-    #             x = mutation.swap(x)
-    #         elif new_x_strategy == 1:
-    #             x = mutation.reverse(x)
-    #         elif new_x_strategy == 2:
-    #             x = mutation.transpose(x)
-
-    #         self.X[i, :] = x
-
-    #     self.cal_y()
-    #     self.update_pbest()
-    #     self.update_gbest()
-
     def cal_y(self):
+        """Calculate y for every x in X
 
+        Returns:
+            np.ndarray: Y of y values for every x in X
+        """
         # calculate y for every x in X
         self.Y = self.func(self.X).reshape(-1, 1)
         return self.Y
@@ -390,27 +328,6 @@ class PSO_GA(SkoBase):
         self.record_value["X"].append(self.X)
         self.record_value["Y"].append(self.Y)
 
-    def old_run(self, max_iter=None):
-        self.max_iter = max_iter or self.max_iter
-        for iter_num in range(self.max_iter):
-            # self.update_V()
-            self.recorder()
-            self.update_X()
-            # self.cal_y()
-            # self.update_pbest()
-            # self.update_gbest()
-
-            if self.verbose:
-                print(
-                    "Iter: {}, Best fit: {} at {}".format(
-                        iter_num, self.gbest_y, self.gbest_x
-                    )
-                )
-
-            self.gbest_y_hist.append(self.gbest_y)
-        self.best_x, self.best_y = self.gbest_x, self.gbest_y
-        return self.best_x, self.best_y
-
     def de_iter(self):
         self.mutation()
         self.recorder()
@@ -423,10 +340,7 @@ class PSO_GA(SkoBase):
     def pso_iter(self):
         self.update_pso_V()
         self.recorder()
-        old_x = self.X.copy()
         self.update_X()
-        if (old_x == self.X).all():
-            print("this is unholy")
         self.cal_y()
         self.update_pbest()
         self.update_gbest()
@@ -449,12 +363,12 @@ class PSO_GA(SkoBase):
 
         match self.mutation_strategy:
 
-            case 'DE/best/1':
+            case "DE/best/1":
                 # DE/best/k strategy makes more sense here  (k=1 or 2)
                 self.V = self.gbest_x + self.F * (X[r2, :] - X[r3, :])
-            case 'DE/rand/1':
+            case "DE/rand/1":
                 self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
-            case 'DE/rand/2':
+            case "DE/rand/2":
                 self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
 
         # Here F uses a fixed value. In order to prevent premature maturity, it can be changed to an adaptive value.
@@ -566,8 +480,8 @@ class PSO_GA(SkoBase):
                 self.cg = self.cg + 0.25 * self.cp
                 self.cp = self.cp * 0.75
             elif self.skew_social and iter_num == np.floor(0.75 * self.max_iter):
-                self.cg = self.cg + (1/3) * self.cp
-                self.cp = self.cp * (2/3)
+                self.cg = self.cg + (1 / 3) * self.cp
+                self.cp = self.cp * (2 / 3)
 
         self.best_x, self.best_y = self.gbest_x, self.gbest_y
         return self.best_x, self.best_y

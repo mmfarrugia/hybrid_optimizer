@@ -4,6 +4,9 @@
 Plot Formatters
 
 This module implements helpful classes to format your plots or create meshes.
+
+This code is pulled from the open-source package pyswarms by @ljvmiranda with
+minimal adaptation for the purpose of visualizing hybrid optimization results.
 """
 
 # Import modules
@@ -61,12 +64,8 @@ class Designer(object):
 
     # Overall plot design
     figsize = attrib(type=tuple, validator=instance_of(tuple), default=(10, 8))
-    title_fontsize = attrib(
-        validator=instance_of((str, int, float)), default="large"
-    )
-    text_fontsize = attrib(
-        validator=instance_of((str, int, float)), default="medium"
-    )
+    title_fontsize = attrib(validator=instance_of((str, int, float)), default="large")
+    text_fontsize = attrib(validator=instance_of((str, int, float)), default="medium")
     legend = attrib(validator=instance_of(str), default="Cost")
     label = attrib(
         validator=instance_of((str, list, tuple)),
@@ -76,9 +75,7 @@ class Designer(object):
         validator=instance_of((list, tuple)),
         default=[(-1, 1), (-1, 1), (-1, 1)],
     )
-    colormap = attrib(
-        validator=instance_of(colors.Colormap), default=cm.viridis
-    )
+    colormap = attrib(validator=instance_of(colors.Colormap), default=cm.viridis)
 
 
 @attrs
@@ -162,9 +159,7 @@ class Mesher(object):
     func = attrib()
     # For mesh creation
     delta = attrib(type=float, default=0.001)
-    limits = attrib(
-        validator=instance_of((list, tuple)), default=[(-1, 1), (-1, 1)]
-    )
+    limits = attrib(validator=instance_of((list, tuple)), default=[(-1, 1), (-1, 1)])
     levels = attrib(type=list, default=np.arange(-2.0, 2.0, 0.070))
     # Surface transparency
     alpha = attrib(type=float, validator=instance_of(float), default=0.3)
@@ -334,9 +329,7 @@ def plot_cost_history(
             _, ax = plt.subplots(1, 1, figsize=designer.figsize)
 
         # Plot with iters in x-axis and the cost in y-axis
-        ax.plot(
-            np.arange(iters), cost_history, "k", lw=2, label=designer.legend
-        )
+        ax.plot(np.arange(iters), cost_history, "k", lw=2, label=designer.legend)
 
         # Customize plot depending on parameters
         ax.set_title(title, fontsize=designer.title_fontsize)
@@ -345,7 +338,7 @@ def plot_cost_history(
         ax.set_ylabel(designer.label[1], fontsize=designer.text_fontsize)
         ax.tick_params(labelsize=designer.text_fontsize)
     except TypeError:
-        #logger.exception("Please check your input type")
+        # logger.exception("Please check your input type")
         raise
     else:
         return ax
@@ -403,9 +396,7 @@ def plot_contour(
     try:
         # If no Designer class supplied, use defaults
         if designer is None:
-            designer = Designer(
-                limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"]
-            )
+            designer = Designer(limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"])
 
         # If no Animator class supplied, use defaults
         if animator is None:
@@ -418,7 +409,14 @@ def plot_contour(
         else:
             fig, ax = canvas
 
-        frame_text = ax.text(0.05, 0.95, s='', transform=ax.transAxes, horizontalalignment='left',verticalalignment='top')
+        frame_text = ax.text(
+            0.05,
+            0.95,
+            s="",
+            transform=ax.transAxes,
+            horizontalalignment="left",
+            verticalalignment="top",
+        )
 
         # Get number of iterations
         n_iters = len(pos_history)
@@ -454,7 +452,7 @@ def plot_contour(
         )
     except TypeError:
         print("Please check your input type")
-        #rep.logger.exception("Please check your input type")
+        # rep.logger.exception("Please check your input type")
         raise
     else:
         return anim
@@ -561,10 +559,18 @@ def plot_surface(
             fig, ax = canvas
 
         # Initialize 3D-axis
-        ax = plt.axes(projection='3d') #Axes3D(fig)
+        ax = plt.axes(projection="3d")  # Axes3D(fig)
         ax.grid()
 
-        frame_text = ax.text(0.05*designer.limits[0][0], 0.95*designer.limits[1][1], z= 0.95*designer.limits[2][1], s='', transform= ax.transAxes, horizontalalignment='left',verticalalignment='top')
+        frame_text = ax.text(
+            0.05 * designer.limits[0][0],
+            0.95 * designer.limits[1][1],
+            z=0.95 * designer.limits[2][1],
+            s="",
+            transform=ax.transAxes,
+            horizontalalignment="left",
+            verticalalignment="top",
+        )
 
         n_iters = len(pos_history)
 
@@ -580,9 +586,7 @@ def plot_surface(
         # Make a contour map if possible
         if mesher is not None:
             (xx, yy, zz) = _mesh(mesher, n_processes=n_processes)
-            ax.plot_surface(
-                xx, yy, zz, cmap=designer.colormap, alpha=mesher.alpha
-            )
+            ax.plot_surface(xx, yy, zz, cmap=designer.colormap, alpha=mesher.alpha)
 
         # Mark global best if possible
         if mark is not None:
@@ -603,11 +607,10 @@ def plot_surface(
         )
     except TypeError:
         print("Please check your input type")
-        #rep.logger.exception("Please check your input type")
         raise
     else:
         return anim
-    
+
 
 def plot_summary(
     optimizers,
@@ -662,9 +665,7 @@ def plot_summary(
     try:
         # If no Designer class supplied, use defaults
         if designer is None:
-            designer = Designer(
-                limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"]
-            )
+            designer = Designer(limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"])
 
         # If no Animator class supplied, use defaults
         if animator is None:
@@ -677,47 +678,55 @@ def plot_summary(
         else:
             fig, ax = canvas
 
-        frame_text = ax[2,0].text(0.05, 0.95, s='', transform=ax[0,0].transAxes, horizontalalignment='left',verticalalignment='top')
+        frame_text = ax[2, 0].text(
+            0.05,
+            0.95,
+            s="",
+            transform=ax[0, 0].transAxes,
+            horizontalalignment="left",
+            verticalalignment="top",
+        )
 
         # Get number of iterations
-        n_iters = len(optimizers[0].record_value['X'])
+        n_iters = len(optimizers[0].record_value["X"])
 
         # Customize plot
         fig.suptitle(title, fontsize=designer.title_fontsize)
-
-        
 
         pos_histories = []
         plots = []
 
         for i, opt in enumerate(optimizers):
-            #assert len(opt.record_value['X']) == len(optimizers[0].record_value['X'])
-            if titles : ax[0,i].set_title(titles[i])
+            # assert len(opt.record_value['X']) == len(optimizers[0].record_value['X'])
+            if titles:
+                ax[0, i].set_title(titles[i])
 
-            Y_history = pd.DataFrame(np.array(opt.record_value['Y']).reshape((-1, opt.size_pop)))
-            ax[1,i].set_title(str(opt.gbest_y)+' @ X: '+str(opt.gbest_x), fontsize=8)
-            ax[0,i].plot(Y_history.index, Y_history.values, '.')
-            Y_history.min(axis=1).cummin().plot(kind='line', ax=ax[1,i])
+            Y_history = pd.DataFrame(
+                np.array(opt.record_value["Y"]).reshape((-1, opt.size_pop))
+            )
+            ax[1, i].set_title(
+                str(opt.gbest_y) + " @ X: " + str(opt.gbest_x), fontsize=8
+            )
+            ax[0, i].plot(Y_history.index, Y_history.values, ".")
+            Y_history.min(axis=1).cummin().plot(kind="line", ax=ax[1, i])
 
-            ax[2,i].set_xlabel(designer.label[0], fontsize=designer.text_fontsize)
-            ax[2,i].set_ylabel(designer.label[1], fontsize=designer.text_fontsize)
-            ax[2,i].set_xlim(designer.limits[0])
-            ax[2,i].set_ylim(designer.limits[1])
+            ax[2, i].set_xlabel(designer.label[0], fontsize=designer.text_fontsize)
+            ax[2, i].set_ylabel(designer.label[1], fontsize=designer.text_fontsize)
+            ax[2, i].set_xlim(designer.limits[0])
+            ax[2, i].set_ylim(designer.limits[1])
 
             # Make a contour map if possible
             if mesher is not None:
                 (xx, yy, zz) = _mesh(mesher, n_processes=n_processes)
-                ax[2,i].contour(xx, yy, zz, levels=mesher.levels)
+                ax[2, i].contour(xx, yy, zz, levels=mesher.levels)
 
             # Mark global best if possible
             if mark is not None:
-                ax[2,i].scatter(mark[0], mark[1], color="red", marker="x")
+                ax[2, i].scatter(mark[0], mark[1], color="red", marker="x")
 
             # Put scatter skeleton
-            plots.append(ax[2,i].scatter(x=[], y=[], c="black", alpha=0.6, **kwargs))
-            #np.expand_dims(pos_histories, 3, np.asarray(opt.record_value['X']))
-            pos_histories.append(np.asarray(opt.record_value['X']))
-
+            plots.append(ax[2, i].scatter(x=[], y=[], c="black", alpha=0.6, **kwargs))
+            pos_histories.append(np.asarray(opt.record_value["X"]))
 
         # Do animation
         anim = animation.FuncAnimation(
@@ -731,12 +740,9 @@ def plot_summary(
         )
     except TypeError:
         print("Please check your input type")
-        #rep.logger.exception("Please check your input type")
         raise
     else:
         return anim
-
-    
 
 
 def _animate(i, data, plot):
@@ -753,13 +759,14 @@ def _animate(i, data, plot):
         plot._offsets3d = current_pos.T
     return (plot,)
 
+
 def _animate_summary(i, data, plots):
     """Helper animation function that is called sequentially
     IT ACTUALLY WORKS
     :class:`matplotlib.animation.FuncAnimation`
     """
     if i % 10 == 0:
-            plots[0].axes.texts[0].set_text(str(i))
+        plots[0].axes.texts[0].set_text(str(i))
 
     for j, plot in enumerate(plots):
         opt_data = data[j]
@@ -789,9 +796,7 @@ def _mesh(mesher, n_processes=None):
     if pool is None:
         z = mesher.func(xypairs)
     else:
-        results = pool.map(
-            mesher.func, np.array_split(xypairs, pool._processes)
-        )
+        results = pool.map(mesher.func, np.array_split(xypairs, pool._processes))
         z = np.concatenate(results)
 
     # Close Pool of Processes
