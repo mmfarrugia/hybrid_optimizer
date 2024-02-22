@@ -10,14 +10,16 @@ minimal adaptation for the purpose of visualizing hybrid optimization results.
 """
 
 # Import modules
-import copy
 import numpy as np
 from attr import attrib, attrs
 from attr.validators import instance_of
 from matplotlib import cm, colors
-import multiprocessing as mp
-
 import pandas as pd
+import sys
+import multiprocessing
+
+if sys.platform != 'win32':
+    multiprocessing.set_start_method('fork')
 
 
 @attrs
