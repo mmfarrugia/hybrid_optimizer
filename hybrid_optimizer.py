@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import numpy as np
 from enum import Enum
+from typing import Tuple
 
 from sko.PSO import PSO
 from sko.DE import DE
@@ -147,88 +148,126 @@ class Bounds_Handler(Enum):
     REFLECTIVE = reflective
     RANDOM = random
 
+def exp_decay(start: float, end: float, iter_num: int, max_iter: int, d2=7) -> float:
+    """Exponential Decay function
+
+    Args:
+        start (float): starting value for the parameter under exponential decay.
+        end (float): ending value for the parameter under exponential decay.
+        iter_num (int): Current iteration number.
+        max_iter (int): Maximum number of iterations
+        d2 (int, optional): Constant which modulates the steepness of the exponential decay function. Defaults to 7.
+
+    Returns:
+        float: value of exponential decay function for the current iteration
+    """
+    return (start - end) * np.exp(-d2 * iter_num / max_iter) + end
+
 # endregion Utilities
 
-class PSO_GA(SkoBase):
+class PSO_DE(SkoBase):
     def __init__(
         self,
         func,
-        n_dim,
-        config = None,
-        F=0.5,
-        size_pop=50,
-        max_iter=200,
-        lb=[-1000.0],
-        ub=[1000.0],
-        w=0.8,
-        c1=0.1,
-        c2=0.1,
-        prob_mut=0.001,
-        constraint_eq=tuple(),
-        constraint_ueq=tuple(),
-        n_processes=0,
-        taper_GA=False,
-        taper_mutation=False,
-        skew_social=True,
-        early_stop=None,
-        initial_guesses=None,
-        guess_deviation=100,
-        guess_ratio=0.25,
-        vectorize_func=True,
-        bounds_strategy:Bounds_Handler=Bounds_Handler.PERIODIC,
-        mutation_strategy = 'DE/rand/1'
+        n_dim: int,
+        config: dict = None,
+        F: Tuple[float, float] = (0.7, 0.1),
+        size_pop: int = 50,
+        max_iter: int = 200,
+        lb: np.ndarray = [-1000.0],
+        ub: np.ndarray = [1000.0],
+        w: Tuple[float, float] = (0.9, 0.4),
+        c1: Tuple[float, float] = (2.5, 0.5),
+        c2: Tuple[float, float] = (0.5, 2.5),
+        recomb_constant: Tuple[float, float] = (0.7, 0.7),
+        constraint_eq: tuple = tuple(),
+        constraint_ueq: tuple = tuple(),
+        n_processes: int = 1,
+        taper_DE: bool = False,
+        early_stop: int = None,
+        initial_guesses: np.ndarray = None,
+        guess_deviation: np.ndarray = [100.0],
+        guess_ratio: float = 0.25,
+        vectorize_func: bool = True,
+        bounds_strategy: Bounds_Handler = Bounds_Handler.PERIODIC,
+        mutation_strategy: str = "DE/rand/1",
+        verbose: bool = False,
     ):
+        """Creates a hybrid Particle Swarm (PS)-Differential Evolution (DE) Optimizer object and initializes the swarm.
+
+        Note:
+            Hyperparameter values F, recomb_constant, w, c1, and c2 can be varied strategically over the course of the
+            optimization so provide both a starting and ending value for these parameters. The strategy for their variation
+            is set by an argument given in the self.run method.
+
+        Args:
+            func (_type_): The heuristic function which evaluates particle fitness or, in other words, calculates the Y value for each particle.
+            n_dim (int): # of dimensions of the search space/the particle positions.
+            config (dict, optional): Dictionary to configure some or all optimizer hyperparameters/settings. Defaults to None.. Defaults to None.
+            F (Tuple[float, float], optional): (start, end) differential weight or mutation constant for the DE step. Increasing this value increases the magnitude of the vectors which move the particles. Defaults to (0.5, 0.5).. Defaults to (0.5, 0.5).
+            size_pop (int, optional): # of particles in the swarm. Defaults to 50.
+            max_iter (int, optional): Maximum # of iterations. Defaults to 200.
+            lb (np.ndarray, optional): lower bounds of search space. Accepts arguments of length n_dim or 1. If length is 1, the bound is used for all dimensions. Defaults to [-1000.0].
+            ub (np.ndarray, optional): upper bounds of search space. Accepts arguments of length n_dim or 1. If length is 1, the bound is used for all dimensions.. Defaults to [1000.0].
+            w (Tuple[float, float], optional): (start, end) inertial weight of particles for the PS step. Increasing this value encourages the particles to explore the search space. Defaults to (0.9, 0.4).
+            c1 (Tuple[float, float], optional): (start, end) cognitive parameter for PS step. Represents the velocity bias towards a particle's personal best position, encourages exploration. Defaults to (2.5,0.5).
+            c2 (Tuple[float, float], optional): (start, end) social parameter for PS step. Represents the velocity bias towards the swarm's global best position, encourages exploitation. Defaults to (0.5, 2.5).
+            recomb_constant (Tuple[float, float], optional): (start, end) recombination constant or crossover/mutation probability for the DE step. Defaults to (0.7, 0.7). Note: lower for stability (fewer)
+            constraint_eq (tuple, optional): Constraint equality. Defaults to tuple().
+            constraint_ueq (tuple, optional): Constraint inequality. Defaults to tuple().
+            n_processes (int, optional): # of function evaluations to run in parallel. Defaults to 1.
+            taper_DE (bool, optional): If True, the optimizer will decrease the frequency of DE steps in the optimization until they reach 0 at the end of optimization, running only PS steps. Defaults to False.
+            early_stop (int, optional): _description_. Defaults to None. TODO
+            initial_guesses (np.ndarray, optional): Starting point for the optimization of shape (n_dim, 1). Defaults to None.
+            guess_deviation (np.ndarray, optional): If initial_points given, limits how far the initial position of the tethered particles will deviate from the initial points. Accepts arguments of length n_dim or 1 of float elements. If length is 1, the bound is used for all dimensions. Defaults to 100.
+            guess_ratio (float, optional): The ratio of particles which should start at positions 'tethered' to the initial_points if given. Defaults to 0.25.
+            vectorize_func (bool, optional): If True, the func argument method/heuristic function will be vectorized to calculate each particle's position independently/in parallel. Defaults to True.
+            bounds_strategy (Bounds_Handler, optional): the bounds handler whose strategy should handle out-of-bounds particles. Defaults to Bounds_Handler.PERIODIC.
+            mutation_strategy (str, optional): The mutation strategy which should be used for the DE steps. Defaults to 'DE/rand/1'.
+            verbose (bool, optional): _description_. Defaults to False.
+        """
         self.func = func_transformer(func) if config.get('vectorize_func', vectorize_func) else func  # , n_processes)
         self.func_raw = func
+        self.n_processes = n_processes
         self.n_dim = n_dim
 
-        # if config_dict:
-        self.F = config.get('F', F)
-        assert config.get('size_pop', size_pop) % 2 == 0, "size_pop must be an even integer for GA"
-        self.size_pop = config.get('size_pop', size_pop)
-        self.tether_ratio = config.get('guess_ratio', guess_ratio)
-        self.max_iter = config.get('max_iter', max_iter)
-        self.prob_mut = config.get('prob_mut', prob_mut)
-        self.early_stop = config.get('early_stop', early_stop)
-        self.taper_GA = config.get('taper_GA', taper_GA)
-        self.taper_mutation = config.get('taper_mutation', taper_mutation)
-        self.skew_social = config.get('skew_social',  skew_social)
-        self.bounds_handler:Bounds_Handler = config.get('bounds_strategy', bounds_strategy)
-        self.mutation_strategy = config.get('mutation_strategy', mutation_strategy)
+        self.F_0, self.F_t = config.get("differential_weight", F)
+        self.F = self.F_0
+        assert (
+            config.get("size_pop", size_pop) % 2 == 0
+        ), "size_pop must be an even integer for GA"
+        self.size_pop = config.get("size_pop", size_pop)
+        self.tether_ratio = config.get("guess_ratio", guess_ratio)
+        self.max_iter = config.get("max_iter", max_iter)
+        self.recomb_constant_0, self.recomb_constant_t = config.get(
+            "recombination_constant", recomb_constant
+        )
+        self.recomb_constant = self.recomb_constant_0
+        self.early_stop = config.get("early_stop", early_stop)
+        self.taper_DE = config.get("taper_DE", taper_DE)
+        self.taper_mutation = self.F_t != self.F_0 and self.F_t != self.F
+        self.bounds_handler: Bounds_Handler = config.get(
+            "bounds_strategy", bounds_strategy
+        )
+        self.mutation_strategy = config.get("mutation_strategy", mutation_strategy)
 
-        self.w = config.get('w', w)
-        self.cp = config.get('c1', c1)  # personal best -- cognitive
-        self.cg = config.get('c2', c2)  # global best -- social
+        self.w_0, self.w_t = config.get("inertia", w)
+        self.w = self.w_0
+        self.cp_0, self.cp_t = config.get("cognitive", c1)
+        self.cp = self.cp_0
+        self.cg_0, self.cg_t = config.get(
+            "social", c2
+        )  # global best -- social acceleration constant
+        self.cg = self.cg_0
+        self.skew_social = self.cg_0 != self.cg_t and self.cg_t != self.cg
 
         self.Chrom = None
 
-        self.lb = np.array(config.get('lb',  lb))
-        self.ub = np.array(config.get('ub',  ub))
-        initial_guesses = config.get('initial_guesses', initial_guesses)
-        guess_deviation = config.get('guess_deviation', guess_deviation)
-        guess_ratio = config.get('guess_ratio', guess_ratio)
-
-        # else:
-        #     self.F = F
-        #     assert size_pop % 2 == 0, "size_pop must be an even integer for GA"
-        #     self.size_pop = size_pop
-        #     self.tether_ratio = guess_ratio
-        #     self.max_iter = max_iter
-        #     self.prob_mut = prob_mut
-        #     self.early_stop = early_stop
-        #     self.taper_GA = taper_GA
-        #     self.taper_mutation = taper_mutation
-        #     self.skew_social = skew_social
-        #     self.bounds_handler:Bounds_Handler = bounds_strategy
-        #     self.mutation_strategy = mutation_strategy
-
-        #     self.w = w
-        #     self.cp = c1  # personal best -- cognitive
-        #     self.cg = c2  # global best -- social
-
-        #     self.Chrom = None
-
-        #     self.lb, self.ub = np.array(lb), np.array(ub)
+        self.lb = np.array(config.get("lb", lb))
+        self.ub = np.array(config.get("ub", ub))
+        initial_guesses = config.get("initial_guesses", initial_guesses)
+        guess_deviation = config.get("guess_deviation", guess_deviation)
+        guess_ratio = config.get("guess_ratio", guess_ratio)
 
         assert (
             self.n_dim == self.lb.size == self.ub.size
@@ -241,7 +280,7 @@ class PSO_GA(SkoBase):
         self.is_feasible = np.array([True] * size_pop)
 
         self.crt_initial(
-            initial_points=initial_guesses,
+            initial_points=np.array(initial_guesses),
             initial_deviation=guess_deviation,
             tether_ratio=guess_ratio,
         )
@@ -260,9 +299,37 @@ class PSO_GA(SkoBase):
         self.update_pbest()
 
         # record verbose values
-        self.record_mode = False
+        self.record_mode = True
         self.record_value = {"X": [], "V": [], "Y": []}
-        self.verbose = False
+        self.verbose = verbose
+    #     self,
+    #     func,
+    #     n_dim,
+    #     config = None,
+    #     F=0.5,
+    #     size_pop=50,
+    #     max_iter=200,
+    #     lb=[-1000.0],
+    #     ub=[1000.0],
+    #     w=0.8,
+    #     c1=0.1,
+    #     c2=0.1,
+    #     recomb_constant=0.001,
+    #     constraint_eq=tuple(),
+    #     constraint_ueq=tuple(),
+    #     n_processes=0,
+    #     taper_DE=False,
+    #     taper_mutation=False,
+    #     skew_social=True,
+    #     early_stop=None,
+    #     initial_guesses=None,
+    #     guess_deviation=100,
+    #     guess_ratio=0.25,
+    #     vectorize_func=True,
+    #     bounds_strategy:Bounds_Handler=Bounds_Handler.PERIODIC,
+    #     mutation_strategy = 'DE/rand/1'
+
+   
 
     def crt_X(self):
         tmp = np.random.rand(self.size_pop, self.n_dim)
@@ -448,7 +515,6 @@ class PSO_GA(SkoBase):
             r1, r2, r3 = random_idx[:, 0], random_idx[:, 1], random_idx[:, 2]
 
         match self.mutation_strategy:
-
             case 'DE/best/1':
                 # DE/best/k strategy makes more sense here  (k=1 or 2)
                 self.V = self.gbest_x + self.F * (X[r2, :] - X[r3, :])
@@ -477,7 +543,7 @@ class PSO_GA(SkoBase):
         """
         if rand < prob_crossover, use V, else use X
         """
-        mask = np.random.rand(self.size_pop, self.n_dim) <= self.prob_mut
+        mask = np.random.rand(self.size_pop, self.n_dim) <= self.recomb_constant
         self.U = np.where(mask, self.V, self.X)
         return self.U
 
@@ -517,12 +583,17 @@ class PSO_GA(SkoBase):
         else:
             return self.Y
 
-    def run(self, max_iter=None, precision=None, N=20):
-        """
-        precision: None or float
-            If precision is None, it will run the number of max_iter steps
-            If precision is a float, the loop will stop if continuous N difference between pbest less than precision
-        N: int
+    def run(self, max_iter=None, precision=None, N=20, strategy:str = "exp_decay") -> Tuple[np.ndarray, float]:
+        """Run the hybrid optimizer until maximum iterations or precision reached.
+
+        Args:
+            max_iter (int, optional): Maximum number of iterations. Defaults to None and uses self.max_iter else uses max_iter and replaces sef.max_iter.
+            precision (float, optional): If precision is None, it will run the number of max_iter steps. If precision is a float, the loop will stop if continuous N difference between pbest less than precision. Defaults to None.
+            N (int, optional): # of stagnant iterations before precision is considered reached. Defaults to 20.
+            strategy (str, optional): Strategy by which to vary optimization hyperparamaters. Defaults to 'exp_decay'.
+
+        Returns:
+            Tuple[np.ndarray, float]: (best position, best heuristic value) results of optimization
         """
         self.max_iter = max_iter or self.max_iter
         c = 0
@@ -530,14 +601,14 @@ class PSO_GA(SkoBase):
             self.pso_iter()
 
             if precision is not None:
-                tor_iter = np.amax(self.pbest_y) - np.amin(self.pbest_y)
+                tor_iter = np.amax(self.pbest_y) - np.amin(self.pbest_y) #TODO: MF can later adapt this to have multiple convergence criterion supported (like the one in Q2MM HO)
                 if tor_iter < precision:
                     c = c + 1
                     if c > N:
                         break
                 else:
                     c = 0
-            if self.taper_GA:
+            if self.taper_DE and self.mutation_strategy != '':
                 if (
                     iter_num <= np.floor(0.25 * self.max_iter)
                     or (
@@ -558,16 +629,14 @@ class PSO_GA(SkoBase):
                 )
             self.gbest_y_hist.append(self.gbest_y)
 
-            if self.taper_mutation and iter_num == np.floor(0.25 * self.max_iter):
-                self.prob_mut = self.prob_mut / 10.0
-            elif self.taper_mutation and iter_num == np.floor(0.75 * self.max_iter):
-                self.prob_mut = self.prob_mut / 10.0
-            if self.skew_social and iter_num == np.floor(0.5 * self.max_iter):
-                self.cg = self.cg + 0.25 * self.cp
-                self.cp = self.cp * 0.75
-            elif self.skew_social and iter_num == np.floor(0.75 * self.max_iter):
-                self.cg = self.cg + (1/3) * self.cp
-                self.cp = self.cp * (2/3)
+            if self.taper_mutation:
+                if strategy == "exp_decay":
+                    self.F = exp_decay(self.F_0, self.F_t, iter_num, self.max_iter)
+            if self.skew_social:
+                if strategy == "exp_decay":
+                    self.cp = exp_decay(self.cp_0, self.cp_t, iter_num, self.max_iter)
+                    self.w = exp_decay(self.w_0, self.w_t, iter_num, self.max_iter)
+                    self.cg = (self.cg_0 + self.cp_0) - self.cp
 
         self.best_x, self.best_y = self.gbest_x, self.gbest_y
         return self.best_x, self.best_y
@@ -577,389 +646,3 @@ class PSO_GA(SkoBase):
 
     def ranking(self):
         pass
-
-
-class HO(SkoBase, metaclass=ABCMeta):
-    def __init__(
-        self,
-        func,
-        n_dim=None,
-        F=0.5,  # DE
-        pop=40,  # pop in PSO, size_pop in GA
-        max_iter=150,
-        lb=-1e5,  # -1 in DE
-        ub=1e5,  # 1 in DE
-        initial_dev=1e2,
-        tether_ratio=0.25,
-        w=0.8,  # PSO
-        c1=0.5,  # PSO
-        c2=0.5,  # PSO
-        constraint_eq=tuple(),
-        constraint_ueq=tuple(),
-        verbose=False,  # PSO
-        dim=None,  # PSO
-        prob_mut=0.3,  # DE
-        early_stop=None,  # DE
-        initial_points=None,
-    ):
-        super().__init__()
-        self.pso: PSO = PSO(
-            func,
-            n_dim=n_dim,
-            pop=pop,
-            max_iter=max_iter,
-            lb=lb,
-            ub=ub,
-            w=w,
-            c1=c1,
-            c2=c2,
-            constraint_eq=constraint_eq,
-            constraint_ueq=constraint_ueq,
-            verbose=verbose,
-            dim=dim,
-        )
-        self.de: DE = DE(
-            func,
-            n_dim=n_dim,
-            F=F,
-            size_pop=pop,
-            max_iter=max_iter,
-            lb=lb,
-            ub=ub,
-            prob_mut=prob_mut,
-            constraint_eq=constraint_eq,
-            constraint_ueq=constraint_ueq,
-        )
-
-        self.n_dim = n_dim or dim  # support the earlier version
-
-        self.func = func_transformer(func)
-        self.w = w  # inertia
-        self.cp, self.cg = (
-            c1,
-            c2,
-        )  # parameters to control personal best, global best respectively
-        self.size_pop = pop  # number of particles
-        self.n_dim = (
-            n_dim  # dimension of particles, which is the number of variables of func
-        )
-        self.max_iter = max_iter  # max iter
-        self.verbose = verbose  # print the result of each iter or not
-
-        self.F = F
-        self.initial_points = initial_points
-        self.initial_dev = initial_dev
-        self.tether_ratio = tether_ratio
-
-        self.lb, self.ub = np.array(lb) * np.ones(self.n_dim), np.array(ub) * np.ones(
-            self.n_dim
-        )
-        assert (
-            self.n_dim == len(self.lb) == len(self.ub)
-        ), "dim == len(lb) == len(ub) is not True"
-        assert np.all(self.ub > self.lb), "upper-bound must be greater than lower-bound"
-
-        self.has_constraint = bool(constraint_ueq)
-        self.constraint_ueq = constraint_ueq
-        self.is_feasible = np.array([True] * pop)
-
-        # self.X = np.random.uniform(low=self.lb, high=self.ub, size=(self.size_pop, self.n_dim))
-        self.crtbp(
-            initial_points=initial_points,
-            initial_deviation=initial_dev,
-            tether_ratio=tether_ratio,
-        )
-
-        v_high = self.ub - self.lb
-        self.V = np.random.uniform(
-            low=-v_high, high=v_high, size=(self.size_pop, self.n_dim)
-        )  # speed of particles
-        self.Y = self.cal_y()  # y = f(x) for all particles
-        self.pbest_x = (
-            self.X.copy()
-        )  # personal best location of every particle in history
-        self.pbest_y = np.array(
-            [[np.inf]] * pop
-        )  # best image of every particle in history
-        self.gbest_x = self.pbest_x.mean(axis=0).reshape(
-            1, -1
-        )  # global best location for all particles
-        self.gbest_y = np.inf  # global best y for all particles
-        self.gbest_y_hist = []  # gbest_y of every iteration
-        self.update_gbest()
-
-        # record verbose values
-        self.record_mode = False
-        self.record_value = {"X": [], "V": [], "Y": []}
-        self.best_x, self.best_y = (
-            self.gbest_x,
-            self.gbest_y,
-        )  # history reasons, will be deprecated
-
-        self.prob_mut = prob_mut  # probability of mutation
-        self.early_stop = early_stop
-
-        # constraint:
-        # self.has_constraint = len(constraint_eq) > 0 or len(constraint_ueq) > 0
-        # self.constraint_eq = list(constraint_eq)  # a list of equal functions with ceq[i] = 0
-        # self.constraint_ueq = list(constraint_ueq)  # a list of unequal constraint functions with c[i] <= 0
-
-        self.Chrom = None
-        self.Y_raw = None  # shape = (size_pop,) , value is f(x)
-        self.FitV = None  # shape = (size_pop,)
-
-        # self.FitV_history = []
-        self.generation_best_X = []
-        self.generation_best_Y = []
-
-        self.all_history_Y = []
-        self.all_history_FitV = []
-
-    # @abstractmethod
-    # def chrom2x(self, Chrom):
-    #     pass
-
-    # @abstractmethod
-    # def ranking(self):
-    #     pass
-
-    def crtbp(self, initial_points=None, initial_deviation=1e2, tether_ratio=0.25):
-        # create the population and set it for the first round of PSO-GA
-        assert 1 >= tether_ratio
-        num_tethered = np.floor(self.size_pop * tether_ratio)
-        if initial_points is not None:
-            x_free = np.random.uniform(
-                low=self.lb,
-                high=self.ub,
-                size=(int(self.size_pop - num_tethered), self.n_dim),
-            )
-            lower_tether = initial_points - initial_deviation
-            upper_tether = initial_points + initial_deviation
-            x_tethered = np.random.uniform(
-                low=lower_tether,
-                high=upper_tether,
-                size=(int(num_tethered), self.n_dim),
-            )
-            self.X = np.vstack((x_free, x_tethered))
-        else:
-            self.X = np.random.uniform(
-                low=self.lb, high=self.ub, size=(self.size_pop, self.n_dim)
-            )
-
-    def mutation(self):
-        """
-        V[i]=X[r1]+F(X[r2]-X[r3]),
-        where i, r1, r2, r3 are randomly generated
-        """
-        X = self.X
-        # i is not needed,
-        # and TODO: r1, r2, r3 should not be equal
-        random_idx = np.random.randint(0, self.size_pop, size=(self.size_pop, 3))
-
-        r1, r2, r3 = random_idx[:, 0], random_idx[:, 1], random_idx[:, 2]
-        # assert r1 != r2 and r2 != r3
-
-        # 这里F用固定值，为了防止早熟，可以换成自适应值
-        self.V = X[r1, :] + self.F * (X[r2, :] - X[r3, :])
-
-        # the lower & upper bound still works in mutation
-        mask = np.random.uniform(
-            low=self.lb, high=self.ub, size=(self.size_pop, self.n_dim)
-        )
-        self.V = np.where(self.V < self.lb, mask, self.V)
-        self.V = np.where(self.V > self.ub, mask, self.V)
-        return self.V
-
-    def crossover(self):
-        """
-        if rand < prob_crossover, use V, else use X
-        """
-        mask = np.random.rand(self.size_pop, self.n_dim) < self.prob_mut
-        self.U = np.where(mask, self.V, self.X)
-        return self.U
-
-    def selection(self):
-        """
-        greedy selection
-        """
-        X = self.X.copy()
-        f_X = self.x2y().copy()
-        self.X = U = self.U
-        f_U = self.x2y()
-
-        self.X = np.where((f_X < f_U).reshape(-1, 1), X, U)
-        return self.X
-
-    def x2y(self):
-        self.Y_raw = self.func(self.X)
-        if not self.has_constraint:
-            self.Y = self.Y_raw
-        else:
-            # constraint
-            penalty_eq = np.array(
-                [np.sum(np.abs([c_i(x) for c_i in self.constraint_eq])) for x in self.X]
-            )
-            penalty_ueq = np.array(
-                [
-                    np.sum(np.abs([max(0, c_i(x)) for c_i in self.constraint_ueq]))
-                    for x in self.X
-                ]
-            )
-            self.Y = self.Y_raw + 1e5 * penalty_eq + 1e5 * penalty_ueq
-        return self.Y
-
-    def old_run(self, max_iter=None, precision=None, N=20):
-        self.max_iter = max_iter or self.max_iter
-        c = 0
-        for iter_num in range(self.max_iter):
-            self.pso.X, self.pso.Y, self.pso.V = self.X, self.Y, self.V
-            self.pso.recorder()
-            self.pso.update_pbest()
-            self.pso.update_gbest()
-            self.pso.run(max_iter=1, precision=precision, N=N)
-            self.X, self.Y, self.V = self.pso.X, self.pso.Y, self.pso.V
-            self.recorder()
-            self.pso.need_update
-            self.update_pbest()
-            self.update_gbest()
-            de_y = self.Y.flatten()
-            self.de.X, self.de.Y, self.de.V = self.X, self.Y.flatten(), self.V
-            self.de.generation_best_X.append(self.gbest_x)
-            self.de.generation_best_Y.append(self.gbest_y)
-            self.de.all_history_Y.append(self.de.Y)
-            self.de.run(max_iter=1)
-            self.X, self.Y, self.V = (
-                self.de.X,
-                np.reshape(self.de.Y, (self.size_pop, 1)),
-                self.de.V,
-            )
-            self.recorder()
-            self.need_update
-            self.update_pbest()
-            self.update_gbest()
-            if precision is not None:
-                tor_iter = np.amax(self.pbest_y) - np.amin(self.pbest_y)
-                if tor_iter < precision:
-                    c = c + 1
-                    if c > N:
-                        break
-                else:
-                    c = 0
-            if self.verbose:
-                print(
-                    "Iter: {}, Best fit: {} at {}".format(
-                        iter_num, self.gbest_y, self.gbest_x
-                    )
-                )
-
-            self.gbest_y_hist.append(self.gbest_y)
-        self.best_x, self.best_y = self.gbest_x, self.gbest_y
-        return self.best_x, self.best_y
-
-    def update_pso_V(self):
-        r1 = np.random.rand(self.size_pop, self.n_dim)
-        r2 = np.random.rand(self.size_pop, self.n_dim)
-        self.V = (
-            self.w * self.V
-            + self.cp * r1 * (self.pbest_x - self.X)
-            + self.cg * r2 * (self.gbest_x - self.X)
-        )
-
-    def update_X(self):
-        self.X = self.X + self.V
-        self.X = np.clip(self.X, self.lb, self.ub)  # TODO change boundary handler
-
-    def cal_y(self):
-        # calculate y for every x in X
-        self.Y = self.func(self.X).reshape(-1, 1)
-        return self.Y
-
-    def check_constraint(self, x):
-        # gather all unequal constraint functions
-        for constraint_func in self.constraint_ueq:
-            if constraint_func(x) > 0:
-                return False
-        return True
-
-    def update_pbest(self):
-        """
-        personal best
-        :return:
-        """
-        self.need_update = self.pbest_y > self.Y
-        for idx, x in enumerate(self.X):
-            if self.need_update[idx]:
-                self.need_update[idx] = self.check_constraint(x)
-
-        self.pbest_x = np.where(self.need_update, self.X, self.pbest_x)
-        self.pbest_y = np.where(self.need_update, self.Y, self.pbest_y)
-
-    def update_gbest(self):
-        """
-        global best
-        :return:
-        """
-        idx_min = self.pbest_y.argmin()
-        if self.gbest_y > self.pbest_y[idx_min]:
-            self.gbest_x = self.X[idx_min, :].copy()
-            self.gbest_y = self.pbest_y[idx_min]
-
-    def recorder(self):
-        if not self.record_mode:
-            return
-        self.record_value["X"].append(self.X)
-        self.record_value["V"].append(self.V)
-        self.record_value["Y"].append(self.Y)
-
-    def run(self, max_iter=None, precision=None, N=20):
-        """
-        precision: None or float
-            If precision is None, it will run the number of max_iter steps
-            If precision is a float, the loop will stop if continuous N difference between pbest less than precision
-        N: int
-        """
-        self.max_iter = max_iter or self.max_iter
-        c = 0
-        for iter_num in range(self.max_iter):
-            self.pso_iter()
-
-            if precision is not None:
-                tor_iter = np.amax(self.pbest_y) - np.amin(self.pbest_y)
-                if tor_iter < precision:
-                    c = c + 1
-                    if c > N:
-                        break
-                else:
-                    c = 0
-            if self.verbose:
-                (
-                    "Iter: {}, Best fit: {} at {}".format(
-                        iter_num, self.gbest_y, self.gbest_x
-                    )
-                )
-            self.gbest_y_hist.append(self.gbest_y)
-
-            self.de_iter()
-
-        self.best_x, self.best_y = self.gbest_x, self.gbest_y
-        return self.best_x, self.best_y
-
-    def de_iter(self):
-        self.mutation()
-        self.recorder()
-        self.crossover()
-        self.selection()
-        self.cal_y()
-        self.update_pbest()
-        self.update_gbest()
-
-    def pso_iter(self):
-        self.update_pso_V()
-        self.recorder()
-        self.update_X()
-        self.cal_y()
-        self.update_pbest()
-        self.update_gbest()
-
-    fit = run
-
